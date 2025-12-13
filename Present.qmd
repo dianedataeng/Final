@@ -1,6 +1,5 @@
 ---
-title: "Video Presentation"
-format: html
+title: "Presentation"
 ---
 
-{{< video https://www.youtube.com/embed/W9tQNZGaIoQ?si=lhNSzc53VZyUzt0I >}}
+{{< video https://www.youtube.com/embed/SC6Pl0CebnU?si=CmoRR21HtHouu9Vo >}}
