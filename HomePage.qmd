@@ -1,0 +1,36 @@
+---
+title: "Predictors of ER Admissions, Costs, and Test Utilization"
+format: html
+---
+
+# Emergency Room Utilization: In Patient Admissions, Costs, and Insurance Impacts
+
+Welcome to the project website for the STAT 515 Final Project. This site summarizes the full analysis of emergency room (ER) utilization using the 2023 Medical Expenditure Panel Survey (MEPS) dataset.
+
+## Project Overview
+This project investigates emergency room visits in the United States and examines:
+
+- **Predictors of inpatient admission** after an ER visit.
+- **Which ER characteristics lead to the highest total expenditures.**
+- **Whether insurance status impacts the number of tests or procedures a patient receives**, and how socioeconomic factors contribute.
+
+The dataset includes **4,241 ER visits** with information about:
+- Diagnostic tests (MRI/CT, X-ray, ultrasound, etc.)
+- Procedures (surgery, prescriptions)
+- Costs (facility, doctor, insurance payments, out-of-pocket)
+- Insurance coverage
+- Demographics (sex, poverty category)
+
+This site contains the full project analysis, tables, models, visualizations, and interpretations.
+
+## Navigation
+Use the sidebar to navigate between sections:
+
+- **Home** — Project introduction
+- **Dataset Overview & Preprocessing** — Description of MEPS ER dataset
+- **Research Question 1** — Predicting inpatient admission
+- **Research Question 2** — Predicting total ER expenditures
+- **Research Question 3** — Insurance status and number of tests
+- **Conclusion** — Summary of findings
+
+---

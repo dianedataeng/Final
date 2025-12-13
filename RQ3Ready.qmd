@@ -1,0 +1,247 @@
+---
+title: "Research Question 3"
+---
+
+## What impacts the number of tests and procedures a patient gets done in the ER?
+
+## Objectives
+
+This research question looks to see if there are any disparities in the amount of testing and procedures a patient gets done in the ER. This can help health care professionals become aware of any blocks or social determinants that may impact patients from getting wholistic care in the ER.
+
+-   **Dependent variable:**
+    -   Total Count of Diagnostic tests and procedures (10 variables into 1)
+-   **Independent variables:**
+    -   Insurance Status
+    -   Poverty Category: Poor/Negative, Near Poor, Low Income, Middle Income, High Income
+    -   Sex
+
+### **\*Notes Data Source & Preprocessing**
+
+After reducing the 15 original variables into just two—insurance status and total tests—the dataset offered limited predictive value. To enhance the analysis, I merged it with another MEPS file containing additional demographic information, allowing for a more comprehensive and nuanced examination. I merged the MEPS 2023 Full Year Consolidated Data File to include additional variables. Using the patient ID, I linked patient data and added sex and poverty information to the dataset.
+
+## Data Visualization
+
+The data has an imbalanced data of 644 patients with no insurance v 3597 with insurance. The side-by-side bar chart in Figure 7 shows a left skewed normal distribution, with most patients in both insured and not insured having around 2 tests.  The proportion of the number of tests in the population is similar. 
+
+```{r}
+#| include: false
+OGData= read.csv("C:/Users/diane/downloads/h248e.csv")
+
+library(tidymodels)
+library(glmnet)
+library(xgboost)
+library(vip)
+library(haven)
+library(ranger)
+library(randomForest)
+library(tree)
+library(ISLR)
+library(dplyr)
+library (plotly)
+library(ggplot2)
+library(dplyr)
+
+library (dplyr)
+library(dplyr)
+
+OGData_clean <- OGData %>%
+  # ── Keep only the variables we actually use across all 3 RQs ──
+dplyr:: select(
+    # Person-level ID and survey weight
+    person_id   = DUPERSID,
+    weight      = PERWT23F,
+    
+    # ── RQ1: Predict hospital admission ──
+    admitted    = ERHEVIDX,        # will recode below
+    
+    # Tests & diagnostics performed in ER (all yes/no → 0/1)
+    mri_ct      = MRI_M18,
+    surgery     = SURGPROC,
+    xray        = XRAYS_M18,
+    lab_tests   = LABTEST_M18,
+    ekg         = EKG_M18,
+    ultrasound  = SONOGRAM_M18,
+    mammogram   = MAMMOG_M18,
+    vaccination = RCVVAC_M18,
+    rx_given    = MEDPRESC,
+    related_condition = VSTRELCN,
+    
+    # ── RQ2: Total ER cost drivers ──
+    total_cost  = ERXP23X,         # total expenditure (facility + doctor)
+    
+    # ── RQ3: Out-of-pocket by insurance ──
+    oop_facility = ERFSF23X,       # self/family OOP facility
+    oop_doctor   = ERDSF23X,       # self/family OOP doctor
+    
+    private_fac  = ERFPV23X,
+    private_doc  = ERDPV23X,
+    medicaid_fac = ERFMD23X,
+    medicaid_doc = ERDMD23X,
+    medicare_fac = ERFMR23X,
+    medicare_doc = ERDMR23X
+  )
+
+
+yesno_vars <- c(
+  "mri_ct", "surgery", "xray", "lab_tests", "ekg",
+  "ultrasound", "mammogram", "vaccination", "rx_given",
+  "related_condition")
+
+OGData_clean <- OGData_clean %>%
+  mutate(across(all_of(yesno_vars), ~ ifelse(. == 1, 1, 0))) #keeps all the 1's and replaces the rest with 0
+
+#cleaning admitted inpatient for RQ1
+OGData_clean$admitted <- ifelse(OGData_clean$admitted == "-1", 0, 1) #-1 not admitted - changing to 0;; recoding 1 to be admitted
+
+#Cleaning Data to find Insurance v No Insurance
+RQ3Data <- OGData_clean %>%
+  mutate(Insurance = case_when(
+    (private_fac > 0  |  private_doc > 0 | medicaid_fac > 0 | medicaid_doc > 0 | medicare_fac > 0 | medicare_doc > 0) ~ "1",
+    TRUE ~ "0"
+  ))
+
+RQ3Data$Insurance <- as.numeric(RQ3Data$Insurance)
+
+#Count the total number of tests / procedures done for pt
+test_vars <- c("mri_ct", "surgery", "xray", "lab_tests", 
+               "ekg", "ultrasound", "mammogram", 
+               "vaccination", "rx_given", "related_condition")
+
+# Create new variable
+RQ3Data <- RQ3Data %>%
+  rowwise() %>%
+  mutate(total_tests = sum(c_across(all_of(test_vars)), na.rm = TRUE)) %>%
+  ungroup()
+
+RQ3Data<- RQ3Data %>%
+  dplyr:: select(Insurance, total_tests,person_id) #added ID or dupersid to merge later
+
+
+library(haven)
+library(dplyr)
+
+#dowloaded the SAS File & filtering only the variables needed
+MergeDataDemo <- read_sas("C:/Users/diane/Downloads/h251.sas7bdat") %>%
+  dplyr::select(DUPERSID, SEX,#1 male, 2 female
+                POVCAT23) #1 is low income to 5 high
+
+RQ3Data <- RQ3Data %>%
+  mutate(person_id = as.numeric(person_id))
+
+MergeDataDemo <- MergeDataDemo %>%
+  mutate(DUPERSID = as.numeric(DUPERSID))
+
+MergedDataRQ3 <- RQ3Data %>%
+  left_join(MergeDataDemo, by = c("person_id" = "DUPERSID"))
+
+MergedDataRQ3 <- MergedDataRQ3 %>%
+   dplyr::select(-person_id)#no need after merge
+
+#changing sex to 0,1 (male 0 female 1)
+MergedDataRQ3 <- MergedDataRQ3 %>%
+  mutate(SEX = ifelse(SEX == 1, 0,
+                      ifelse(SEX == 2, 1, NA)))
+
+#Missing Data
+sum(is.na(MergedDataRQ3)) #no missing
+
+library (ggplot2)
+library (plotly)
+#making the visualization show yes / no
+RQ3Viz <- MergedDataRQ3 %>%
+  mutate(Insurance = factor(Insurance,
+                            levels = c(0, 1),
+                            labels = c("No", "Yes")))
+```
+
+*Figure 7: Bar Chart of Number of ER Tests by Insurance Status*
+
+```{r}
+#| echo: false
+ggplotly(ggplot(RQ3Viz, aes(x = factor(total_tests), fill = factor(Insurance))) +
+  geom_bar(position = "dodge") +
+  labs(
+    title = "Number of ER Tests by Insurance Status",
+    x = "Total Tests/Procedures",
+    y = "Number of Patients",
+    fill = "Insurance"
+  ) +
+  theme_minimal())
+```
+
+Table 1 shows poverty levels and insurance status. For those without insurance, the largest shares fall into the Middle Income (32.76%) and High Income (27.64%) groups. Interestingly, Near Poor and Low-Income patients are more often insured, while a notable portion of uninsured patients come from middle- and high-income groups.
+
+*Table 1: Proportion  of Patients by Poverty Category and Insurance Status*
+
+| Insurance | Poor/Negative | Near Poor | Low Income | Middle Income | High Income |
+|-----------|---------------|-----------|------------|---------------|-------------|
+| No        | 22.36%        | 5.28%     | 11.96%     | 32.76%        | 27.64%      |
+| Yes       | 23.16%        | 7.67%     | 16.15%     | 25.38%        | 27.63%      |
+
+## Multiple Linear Regression
+
+The multiple linear regression results (*Table 2*) showed that the strongest predictor was high income, which was associated with an average increase of 0.24 tests. The next significant predictor was insurance status, with insured patients surprisingly receiving 0.17 fewer tests on average compared to uninsured patients. Other factors, including near-poor status, low income, middle income, and sex, were not significant.
+
+> **Key Insight:** - **High income** associated with an average **increase of 0.24 tests** per patient.
+
+> **Key Insight:** - **Insured patients receiving 0.17 fewer tests on average**
+
+*Table 2. Logistic Regression Ranked Coefficients from Strongest to Weakest*
+
+| Predictor               | Estimate | Std. Error | t value | Pr(\>   |
+|-------------------------|----------|------------|---------|---------|
+| (Intercept)             | 2.73161  | 0.08486    | 32.188  | \<0.001 |
+| High Income\*\*\*       | 0.23923  | 0.07195    | 3.325   | 0.0009  |
+| Insurance (Yes vs No)\* | -0.17027 | 0.07134    | -2.387  | 0.0171  |
+| Near Poor               | 0.11644  | 0.11075    | 1.051   | 0.2932  |
+| Low Income              | 0.02835  | 0.08245    | 0.344   | 0.731   |
+| Middle Income           | 0.00577  | 0.07258    | 0.079   | 0.9366  |
+| Sex (Female vs Male)    | -0.02602 | 0.05236    | -0.497  | 0.6193  |
+
+## Poisson Regression
+
+The Poisson regression is designed to count model data, which specifically addresses counting the number of total tests. Poisson Regression produced results like the linear regression, though the **p-values for high income and insurance status were slightly weaker**. The performance metrics of the two models were also nearly the same. The results showed that the strongest predictor was high income, which was associated with an average increase of 0.09 tests. The next significant predictor was insurance status, with insured patients surprisingly receiving 0.07 fewer tests on average compared to uninsured patients. The remaining factors were not significant.
+
+> **Key Insight:** - **High income** associated with an average **increase of 0.09 tests** per patient.
+
+> **Key Insight:** - **Insured patients receiving 0.07 fewer tests on average**
+
+*Table 3. Poisson Regression Ranked Coefficients from Strongest to Weakest*
+
+| Predictor               | Estimate | Std. Error | t value | Pr(\>   |
+|-------------------------|----------|------------|---------|---------|
+| (Intercept)             | 1.00333  | 0.03723    | 26.953  | \<0.001 |
+| High Income\*\*         | 0.08890  | 0.03174    | 2.801   | 0.0051  |
+| Insurance (Yes vs No)\* | -0.06277 | 0.03093    | -2.029  | 0.0425  |
+| Near Poor               | 0.04439  | 0.04910    | 0.904   | 0.3659  |
+| Low Income              | 0.01094  | 0.03702    | 0.295   | 0.7677  |
+| Middle Income           | 0.00236  | 0.03262    | 0.072   | 0.9424  |
+| Sex (Female vs Male)    | -0.00980 | 0.02317    | -0.423  | 0.6723  |
+
+## Random Forest Regression
+
+The Random Forest regression results indicate that poverty category is the strongest predictor of total tests. Insurance status is the next most important predictor, followed by sex, which has the smallest impact on the model’s predictions. The percent increase in MSE “measures how much the model’s prediction error increases, if the variable is randomly permuted”. The increase in node purity “measures the total improvement in the model’s fit contributed by each variable”. In both these metrics, the poverty category was the strongest predictor, followed by insurance then sex.
+
+*Table 4: Random Forest Regression Results*
+
+| Predictor        | \% Increase in MSE | Increase in Node Purity |
+|------------------|--------------------|-------------------------|
+| Poverty Category | 18.84              | 31.90                   |
+| Insurance        | 8.26               | 12.07                   |
+| Sex              | 4.31               | 7.16                    |
+
+## RQ3: Best Model - Poisson Regression
+
+The performance of all three models was similar. The RMSE was 1.37, meaning the predicted number of tests was off by about 1.37 on average, and the MAE was 1.12, showing an average absolute error of 1.12 tests. 
+
+The Random Forest model had a slightly higher R² of 0.011 compared to 0.008 for both the Poisson and Multiple Linear Regression models, but overall the low R² indicates the models explain very little of the variation in total tests.
+
+One limitation is the low variance in the total tests (around 1.9), which means most observations are close to the mean. Low variance can increase bias and lower R². Variable selection could not be performed because I did not have many variables to choose from after reducing the predictors from 17 to 4 key variables, additional variables were later merged from another dataset. Poisson regression can handle low variance and skewed data very well, so Poisson regression is the most appropriate model for this analysis.
+
+*Table 5: Performance Metrics Comparisons: Random Forest, Poisson Regression, & Multiple Linear Model*
+
+| Model                      | RMSE | MAE  | R²    |
+|----------------------------|------|------|-------|
+| Random Forest              | 1.37 | 1.12 | 0.011 |
+| Poisson Regression         | 1.37 | 1.12 | 0.008 |
+| Multiple Linear Regression | 1.37 | 1.12 | 0.008 |

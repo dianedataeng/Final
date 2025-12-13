@@ -1,0 +1,77 @@
+---
+title: "Emergency Room Utilization: Admissions, Costs, and Testing Patterns"
+format: html
+toc: true
+---
+## Introduction
+
+Emergency room care is one of the most expensive components of U.S. healthcare, and costs have risen dramatically in recent years. Understanding the drivers of high ER expenditures and the factors that lead to hospital admission can help policymakers, hospital administrators, and insurers design more efficient care pathways and reduce financial burden on patients.
+
+## Research Questions
+
+1. **RQ1:** What predictors can help determine whether an ER visit results in inpatient admission?  
+2. **RQ2:** Which characteristics of an ER visit are most strongly associated with the highest total ER expenditure?  
+3. **RQ3:** What impacts the number of tests and procedures a patient gets done in the ER?  
+
+
+## Data Source & Description
+
+The dataset is under the 2023 Medical Expenditure Panel Survey, which surveys a geographically diverse population of the US and their medical providers. A sample of households are interviewed and surveyed for information, then their medical providers are contacted for more information. The medical providers include doctors, hospitals, pharmacies, etc. This dataset specifically covers 2023 and reports data on household reported emergency visits. Only households that have reported an emergency room visit were included in the dataset.
+
+The original MEPS ER visit file includes **4,241 unique patients** and **53 variables**. According to MEPS, this file captures information about each emergency room visit, including: services and procedures performed, diagnostic testing, medications provided, total expenditures, and sources of payment.
+
+## Key Variable Dictionary
+
+| Variable          | Description                                          |
+|-------------------|------------------------------------------------------|
+| person_id         | Unique MEPS identifier (DUPERSID)                    |
+| admitted          | Whether the ER visit resulted in inpatient admission |
+| mri_ct            | MRI or CT scan performed                             |
+| surgery           | Minor surgical procedure performed                   |
+| xray              | X-ray received                                       |
+| lab_tests         | Laboratory tests completed                           |
+| ekg               | Electrocardiogram performed                          |
+| ultrasound        | Ultrasound completed                                 |
+| mammogram         | Mammogram received                                   |
+| vaccination       | Vaccination provided                                 |
+| rx_given          | Prescription medication given                        |
+| related_condition | Visit related to prior condition                     |
+| total_cost        | Total ER expenditure (facility + physician)          |
+| oop_facility      | Out-of-pocket cost for ER facility                   |
+| oop_doctor        | Out-of-pocket cost for ER doctor                     |
+| private_fac       | Private insurance payment (facility)                 |
+| private_doc       | Private insurance payment (doctor)                   |
+| medicaid_fac      | Medicaid payment (facility)                          |
+| medicaid_doc      | Medicaid payment (doctor)                            |
+| medicare_fac      | Medicare payment (facility)                          |
+| medicare_doc      | Medicare payment (doctor)                            |
+| oop_total         | Total out-of-pocket cost (facility + doctor)         |
+| insurance_type    | Derived insurance category                           |
+| sex               | Male / Female                                        |
+| poverty_cat       | Poverty classification (5 levels)                    |
+
+## Data Preprocessing
+
+From the original **53 variables**, 23 were selected as relevant for the research questions.
+
+- **Diagnostic tests and procedures** (MRI/CT, surgery, X-ray, lab tests, EKG, ultrasound, mammogram, vaccination, prescriptions, related condition) used codes like: binary factors (0,1)
+  - `-8` → Don’t know
+  - `-7` → Refused
+  - `95` → Not received  
+
+- **Admission outcome:** - binary factor for modeling.
+  - `0 = Not admitted`  
+  - `1 = Admitted`
+
+- **Insurance:** New binary variable created:  
+  - If **all insurance payments** (Medicaid, Medicare, Private) were zero or missing → Uninsured (`0`)  
+  - If **any insurance payment > 0** → Insured (`1`)  
+
+- **Total tests:** A composite variable (**`total_tests`**) counting the total number of diagnostic tests and procedures received during an ER visit, including MRI/CT, surgery, X-ray, lab tests, EKG, ultrasound, mammogram, vaccinations, and prescriptions. 
+
+The ER visit dataset was merged with the **MEPS 2023 Full-Year Consolidated Data** using the patient identifier to incorporate:  
+- **Sex**  
+- **Poverty category** (five levels: Poor/Negative, Near Poor, Low Income, Middle Income, High Income)
+
+
+  

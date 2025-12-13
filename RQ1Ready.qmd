@@ -1,0 +1,278 @@
+---
+title: "Research Question 1"
+---
+
+## What predictors can help determine whether an ER visit results in inpatient admission?
+
+## Objective
+
+This research question focuses on identifying the factors that determine whether an ER visit leads to an inpatient hospital admission. While many patients are treated and released on the same day, some require longer stays for observation or additional care. 
+
+- **Dependent variable:**  
+  - Inpatient admission 
+  
+- **Independent variables:**  
+  - Diagnostic tests and procedures: 
+    MRI/CT, surgery, X-ray, lab tests, EKG, ultrasound, mammogram, vaccination, prescriptions, related condition
+  - Insurance status
+
+Understanding these factors can help healthcare providers plan more effective treatment strategies. Hospital administrators can also benefit from this information by predicting which patients may require extended care, supporting improved planning and resource management. 
+
+## Data Visualization
+
+```{r}
+#| include: false
+library(tidymodels)
+library(glmnet)
+library(xgboost)
+library(vip)
+library(haven)
+library(ranger)
+library(randomForest)
+library(tree)
+library(ISLR)
+library(dplyr)
+library (plotly)
+library (car)
+OGData= read.csv("C:/Users/diane/downloads/h248e.csv")
+OGData_clean <- OGData %>% #only took variables greater than 0
+  filter(
+    # ── RQ1 & RQ2: Tests, diagnostics, and services received ──
+    MRI_M18     >= 0,    # MRI/CT scan
+    SURGPROC    >= 0,    # Surgery performed
+    XRAYS_M18   >= 0,    # X-rays
+    LABTEST_M18 >= 0,    # Lab tests
+    EKG_M18     >= 0,    # EKG/ECG
+    SONOGRAM_M18 >= 0,   # Ultrasound
+    MAMMOG_M18  >= 0,    # Mammogram
+    RCVVAC_M18  >= 0,    # Vaccination
+    MEDPRESC    >= 0,    # Medicine prescribed
+    VSTRELCN    >= 0,    # Related to specific condition?
+    
+    # ── RQ2: Total expenditure and weight ──
+    ERXP23X     >= 0,    # Total ER expenditure (main outcome)
+    PERWT23F    >  0,    # Survey weight (always positive)
+    
+    # ── RQ1: Admission flag ──
+    ERHEVIDX    >= -1,   # -1 = treat-and-release, >0 = admitted (allow -1!)
+    
+    # ── RQ3: Out-of-pocket and payment sources (facility + doctor) ──
+    ERFSF23X    >= 0,    # OOP facility - this is Out of pocket costs to the facility / ER visit room
+    ERDSF23X    >= 0,    # OOP doctor - out of pocket costs to the doctors
+    ERFPV23X    >= 0,    # Private insurance payment (facility)
+    ERDPV23X    >= 0,    # Private insurance payment (doctor)
+    ERFMD23X    >= 0,    # Medicaid payment (facility)
+    ERDMD23X    >= 0,    # Medicaid payment (doctor)
+    ERFMR23X    >= 0,    # Medicare payment (facility)
+    ERDMR23X    >= 0     # Medicare payment (doctor)
+  )
+bad_rows <- OGData %>% anti_join(OGData_clean)
+
+OGData_clean <- OGData %>%
+  # ── Keep only the variables we actually use across all 3 RQs ──
+dplyr:: select(
+    # Person-level ID and survey weight
+    person_id   = DUPERSID,
+    weight      = PERWT23F,
+    
+    # ── RQ1: Predict hospital admission ──
+    admitted    = ERHEVIDX,        # will recode below
+    
+    # Tests & diagnostics performed in ER (all yes/no → 0/1)
+    mri_ct      = MRI_M18,
+    surgery     = SURGPROC,
+    xray        = XRAYS_M18,
+    lab_tests   = LABTEST_M18,
+    ekg         = EKG_M18,
+    ultrasound  = SONOGRAM_M18,
+    mammogram   = MAMMOG_M18,
+    vaccination = RCVVAC_M18,
+    rx_given    = MEDPRESC,
+    related_condition = VSTRELCN,
+    
+    # ── RQ2: Total ER cost drivers ──
+    total_cost  = ERXP23X,         # total expenditure (facility + doctor)
+    
+    # ── RQ3: Out-of-pocket by insurance ──
+    oop_facility = ERFSF23X,       # self/family OOP facility
+    oop_doctor   = ERDSF23X,       # self/family OOP doctor
+    
+    private_fac  = ERFPV23X,
+    private_doc  = ERDPV23X,
+    medicaid_fac = ERFMD23X,
+    medicaid_doc = ERDMD23X,
+    medicare_fac = ERFMR23X,
+    medicare_doc = ERDMR23X
+  )
+
+OGData_clean <- OGData_clean %>%
+  mutate(Insurance = case_when(
+    (private_fac > 0  |  private_doc > 0 | medicaid_fac > 0 | medicaid_doc > 0 | medicare_fac > 0 | medicare_doc > 0) ~ "1",
+    TRUE ~ "0"
+  ))
+
+OGData_clean$Insurance <- as.numeric(OGData_clean$Insurance)
+
+yesno_vars <- c(
+  "mri_ct", "surgery", "xray", "lab_tests", "ekg",
+  "ultrasound", "mammogram", "vaccination", "rx_given",
+  "related_condition")
+
+OGData_clean <- OGData_clean %>%
+  mutate(across(all_of(yesno_vars), ~ ifelse(. == 1, 1, 0))) #keeps all the 1's and replaces the rest with 0
+
+#cleaning admitted inpatient for RQ1
+OGData_clean$admitted <- ifelse(OGData_clean$admitted == "-1", 0, 1) #-1 not admitted - changing to 0;; recoding 1 to be admitted
+table(OGData_clean$admitted) #not admitted 3345; admitted:896
+
+RQ1Viz <- OGData_clean %>%
+mutate(admitted = factor(admitted, levels = c(0,1), labels = c("No","Yes")),
+        mri_ct = factor(mri_ct, levels = c(0,1), labels = c("No","Yes")))
+
+RQ1Data <- OGData_clean %>%
+  dplyr:: select(admitted,        
+    mri_ct      ,
+    surgery,
+    xray ,
+    lab_tests ,
+    ekg    ,
+    ultrasound ,
+    mammogram ,
+    vaccination ,
+    rx_given ,
+    related_condition,
+    Insurance)
+
+```
+
+Figure 1 illustrates that a smaller proportion of patients were admitted as inpatients v not admitted (21% v 79%). This highlights the skewed and imbalanced population, but this imbalance will be considered in the analysis.
+
+*Figure 1: Count of ER Visits by In Patient Admission Status*
+
+```{r}
+#| echo: false
+ggplotly (ggplot(RQ1Viz, aes(x = factor(admitted), fill = factor(admitted))) +
+  geom_bar(position = "dodge") +
+  labs(
+    title = "Count of ER Visits by In Patient Admission Status",
+    x = "In Patient Admitted",
+    y = "Count",
+    fill = "Admitted"
+  ) +
+  theme_minimal())
+
+```
+
+## Logistic Regression
+
+The logistic regression showed certain procedures—like MRI/CT scans, surgery, lab work, EKGs, ultrasounds, and having a related condition—were linked to higher odds of being admitted. 
+
+On the other hand, patients who had insurance or were given a prescription were less likely to be admitted (Figure 3). These two factors turned out to be the strongest predictors of lower inpatient admission. 
+
+Those with insurance have 88% lower odds of being admitted and those given a prescription have 73% lower odds of being admitted. Those who have lab tests have 128% higher odds of admission, patients with related conditions have 162% higher odds of admission, patients with EKGs done have 87% higher odds of admission, patients with surgery have 145% higher odds of admission, patients with ultrasound have 72% higher odds of admission, and patients with MRI CT scans have 53% higher odds of admission.
+
+> **Key Insight:** Patients with insurance have 88% lower odds of inpatient admission.
+>
+> **Key Insight:** Patients who have had lab tests have 128% lower odds of inpatient admission.
+>
+> **Key Insight:** Patients with surgery have 145% lower odds of inpatient admission.
+
+
+```{r}
+#| include: false
+library(caret)
+library(car)
+
+set.seed(1)
+train_index = createDataPartition(RQ1Data$admitted, p = 0.8, list = FALSE) #createdatapartition ensures that admitted / not admitted are acurately represented in both train and test set*
+train_data = RQ1Data[train_index, ]
+test_data = RQ1Data[-train_index, ]
+
+glm_model <- glm(admitted ~ ., data = RQ1Data, family = "binomial")
+vif(glm_model) #no multicolinerarity
+
+#Train Data to predict admitted with Logistic Regression
+glm.admitted=glm(admitted~.,data=train_data,family="binomial") #the . after ~ shows all variables
+summary (glm.admitted)
+```
+
+***Table 1. Logistic Regression Ranked Coefficients from Strongest to Weakest***
+
+| Predictor               | Estimate  | Std. Error | z-value | p-value  |
+|-------------------------|-----------|------------|---------|----------|
+| Insurance\*\*\*         | -2.13319  | 0.11567    | 18.442  | \< 2e-16 |
+| rx_given\*\*\*          | -1.30270  | 0.13127    | 9.924   | \< 2e-16 |
+| lab_tests\*\*\*         | 0.82450   | 0.10913    | 7.555   | 4.19e-14 |
+| related_condition\*\*\* | 0.96239   | 0.17494    | 5.501   | 3.77e-08 |
+| ekg\*\*\*               | 0.62813   | 0.11301    | 5.558   | 2.72e-08 |
+| surgery\*\*\*           | 0.89785   | 0.18537    | 4.844   | 1.28e-06 |
+| ultrasound\*\*\*        | 0.54345   | 0.13630    | 3.987   | 6.69e-05 |
+| mri_ct\*\*\*            | 0.42790   | 0.10906    | 3.924   | 8.72e-05 |
+| Xray                    | -0.03592  | 0.10341    | 0.347   | 0.728    |
+| Vaccination             | -0.18130  | 0.48603    | 0.373   | 0.709    |
+| Mammogram               | -13.87172 | 238.18570  | 0.058   | 0.954    |
+| (Intercept)             | -1.09992  | 0.19147    | 5.744   | 9.22e-09 |
+
+***Table 2: Logistic Regression Confusion Matrix***
+
+| n=4241     |              |               |
+|------------|--------------|---------------|
+| Prediction | Predicted No | Predicted Yes |
+| Actual No  | 647          | 124           |
+| Actual Yes | 29           | 48            |
+
+Table 2 shows the logistic regression confusion matrix, the true positive rate, the rate that correctly predicts those who will be admitted is 62.3% and true negative rate is 83.9%, the rate that correctly predicts who will not be admitted. The type 1 error, which falsely predicts patients being admitted when they are not actually admitted is 16.1% and the type 2 error which also falsely predicts patients not being admitted, when they are truly admitted is 37.7%. Overall, the model has \~82% accuracy rate
+
+True positive rate (62.3%), true negative rate (83.9%), type 1 error (16.1%), and type 2 error (37.7%).
+
+## Random Forest Tree - Classification
+
+The Random Forest model identifies the key factors that influence whether a patient is admitted. This classification approach works by generating hundreds of decision trees and aggregating their results to determine which predictors contribute most to the outcome.
+
+The model used 362 trees to achieve the lowest mean squared error. The results showed that insurance coverage, lab tests, prescriptions given, and EKG were the most influential variables for predicting patient admission. In contrast, vaccination and mammogram variables contributed very little, like the findings from the logistic regression analysis. Figure 3 presents a plot showing the relative importance of each predictor in the Random Forest model. Table 3 presents the corresponding confusion matrix, showing an overall accuracy of approximately 82%.
+
+*Figure 3: Variable Importance Plot – Random Forest*
+
+```{r}
+#| echo: false
+library(randomForest)
+
+# Train a Random Forest model to predict admitted
+rf_model = randomForest(as.factor(admitted) ~ ., data = train_data, ntree = 500)
+varImpPlot(rf_model)
+#importance(rf_model)
+#rf_model
+#importance(rf_model)
+#summary (rf_model)
+
+# Make predictions on the test set
+predictions = predict(rf_model, newdata = test_data)
+
+#model performance
+#rf_model$mse
+#which.min(mse) #362 trees used 
+
+#mean(predictions == test_data$admitted) #81.7
+```
+
+ *Table 3: Random Forest Confusion Matrix & Metrics*
+
+Accuracy: 81.7%, Sensitivity: 96.6%, Specificity: 23.3%
+
+| n=4241     | Predicted No | Predicted Yes |
+|------------|--------------|---------------|
+| Actual No  | 653          | 132           |
+| Actual Yes | 23           | 40            |
+
+```{r}
+#| include: false
+confusionMatrix(predictions, as.factor(test_data$admitted)) #confusion matrix
+```
+
+True positive rate (63.5%%), true negative rate (83.2%), type 1 error (16.8%), and type 2 error (36.5%).
+
+## RQ1 Best Model – Random Forest
+
+The logistic regression and Random Forest models produced similar results, achieving roughly 82% accuracy. The logistic regression model offers greater interpretability, showing that insurance status and whether a prescription was given have negative coefficients. This makes it easier to understand the direction of these effects and how these factors relate to the likelihood of an ER visit resulting in inpatient admission.
+
+The Random Forest model, however, is unable to provide this level of detail. However it does handle imbalanced data better because it builds hundreds of decision trees, each using a different subset of the data. While the two models have similar rates of accuracy, sensitivity, specificity, etc., the Random Forest’s approach allows it to more effectively capture patterns in the skewed admission data, which makes it a better model.

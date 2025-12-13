@@ -1,0 +1,20 @@
+---
+title: "References"
+format: html
+---
+
+-   GeeksforGeeks. (n.d.). [Regression using k-nearest neighbors in R programming](https://www.geeksforgeeks.org/r-language/regression-using-k-nearest-neighbors-in-r-programming/).
+
+-   Jameson, J. (n.d.). [API 222 files – Section 2](https://jacobjameson.com/api%20222%20files/section%202/section2.html).
+
+-   McGill, R., Tukey, J. W., & Larsen, W. A. (1978). Variations of box plots. *The American Statistician, 32*(1), 12–16.
+
+-   MEPS. (n.d.-a). [HC-248E: 2023 full year consolidated data file](https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_detail.jsp?cboPufNumber=HC-248E). Agency for Healthcare Research and Quality.
+
+-   MEPS. (n.d.-b). [Survey background](https://meps.ahrq.gov/mepsweb/about_meps/survey_back.jsp). Agency for Healthcare Research and Quality.
+
+-   MEPS. (n.d.-c). [HC-251: 2023 full year consolidated data file](https://meps.ahrq.gov/mepsweb/data_stats/download_data_files_detail.jsp?cboPufNumber=HC-251the). Agency for Healthcare Research and Quality.
+
+-   Plotly. (n.d.). [R graphing library](https://plotly.com/r/).
+
+-   Daily Dose of Data Science. (n.d.). [Poisson regression vs linear regression](https://blog.dailydoseofds.com/p/poisson-regression-vs-linear-regression).

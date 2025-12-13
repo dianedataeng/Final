@@ -1,0 +1,18 @@
+---
+title: "Conclusion and Future Work"
+format: html
+---
+
+## Conclusion
+
+The Emergency Visit MEPS data provided important insights into inpatient admissions, total costs, and the number of tests performed. Key predictors included procedures, tests, insurance status, and total costs. Several models were used, including multiple linear regression, Poisson regression, random forest regression, random forest classification, and logistic regression.
+
+For research questions 1 and 2, the random forest models performed best because they handled imbalanced data and extreme outliers well. However, the logistic regression model was valuable in showing the direction and size of each predictor’s effect.
+
+For research question 3, the high variance in the data made Poisson regression the most appropriate model, which identified two statistically significant predictors.
+
+These models can help healthcare providers with hospital planning, resource allocation, and policies for holistic, quality patient care.
+
+## Future Work
+
+Future work could involve linking additional MEPS data using the unique patient ID. This might include demographic details such as race, age, geographic location, and type of insurance, which could provide deeper insight into health disparities and patterns across different patient groups.

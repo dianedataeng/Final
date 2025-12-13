@@ -1,0 +1,34 @@
+project:
+  type: website
+  output-dir: doc  # folder for the generated site
+
+website:
+  title: "STAT 515: Final Project - Diane Kim"
+  navbar:
+    left:
+      - href: index.qmd #by changing it to index, helped make the first page landing
+        text: "Emergency Room Utilization: Admissions, Costs, and Testing Patterns"
+      - href: RQ1Ready.qmd
+        text: "Research Question 1"
+      - href: RQ2Ready.qmd
+        text: "Research Question 2"
+      - href: RQ3Ready.qmd
+        text: "Research Question 3"
+      - href: Future.qmd
+        text: "Future Scope & Conclusion"
+      - href: References.qmd
+        text: "References"
+      - href: Codes.qmd
+        text: "Source Code"
+      - href: Present.qmd
+        text: "Video Presentation"
+
+format:
+  html:
+    theme:
+      - yeti
+      - brand
+    css: styles.css
+    toc: true
+
+editor: visual

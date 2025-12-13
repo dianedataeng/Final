@@ -1,0 +1,287 @@
+---
+title: "RQ3"
+author: "Diane"
+date: "2025-12-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+RQ 3: 3. Do uninsured patients recieve less tests compared to insured?
+
+```{r}
+OGData= read.csv("C:/Users/diane/downloads/h248e.csv")
+
+library(tidymodels)
+library(glmnet)
+library(xgboost)
+library(vip)
+library(haven)
+library(ranger)
+library(randomForest)
+library(tree)
+library(ISLR)
+library(dplyr)
+library (plotly)
+library(ggplot2)
+library(dplyr)
+
+```
+
+Renaming Variables
+
+```{r}
+library (dplyr)
+library(dplyr)
+
+OGData_clean <- OGData %>%
+  # ── Keep only the variables we actually use across all 3 RQs ──
+dplyr:: select(
+    # Person-level ID and survey weight
+    person_id   = DUPERSID,
+    weight      = PERWT23F,
+    
+    # ── RQ1: Predict hospital admission ──
+    admitted    = ERHEVIDX,        # will recode below
+    
+    # Tests & diagnostics performed in ER (all yes/no → 0/1)
+    mri_ct      = MRI_M18,
+    surgery     = SURGPROC,
+    xray        = XRAYS_M18,
+    lab_tests   = LABTEST_M18,
+    ekg         = EKG_M18,
+    ultrasound  = SONOGRAM_M18,
+    mammogram   = MAMMOG_M18,
+    vaccination = RCVVAC_M18,
+    rx_given    = MEDPRESC,
+    related_condition = VSTRELCN,
+    
+    # ── RQ2: Total ER cost drivers ──
+    total_cost  = ERXP23X,         # total expenditure (facility + doctor)
+    
+    # ── RQ3: Out-of-pocket by insurance ──
+    oop_facility = ERFSF23X,       # self/family OOP facility
+    oop_doctor   = ERDSF23X,       # self/family OOP doctor
+    
+    private_fac  = ERFPV23X,
+    private_doc  = ERDPV23X,
+    medicaid_fac = ERFMD23X,
+    medicaid_doc = ERDMD23X,
+    medicare_fac = ERFMR23X,
+    medicare_doc = ERDMR23X
+  )
+```
+
+Cleaning up binary data Clean More Data - Deal with 95 & 1&2 to 0,1 remove -8 dont know variables 1 is yes 2 is no - changing to 0,1 - no - 0 yes 1
+
+```{r}
+
+yesno_vars <- c(
+  "mri_ct", "surgery", "xray", "lab_tests", "ekg",
+  "ultrasound", "mammogram", "vaccination", "rx_given",
+  "related_condition")
+
+OGData_clean <- OGData_clean %>%
+  mutate(across(all_of(yesno_vars), ~ ifelse(. == 1, 1, 0))) #keeps all the 1's and replaces the rest with 0
+
+#cleaning admitted inpatient for RQ1
+OGData_clean$admitted <- ifelse(OGData_clean$admitted == "-1", 0, 1) #-1 not admitted - changing to 0;; recoding 1 to be admitted
+```
+
+Adding in Insurance Information
+
+```{r}
+#Cleaning Data to find Insurance v No Insurance
+RQ3Data <- OGData_clean %>%
+  mutate(Insurance = case_when(
+    (private_fac > 0  |  private_doc > 0 | medicaid_fac > 0 | medicaid_doc > 0 | medicare_fac > 0 | medicare_doc > 0) ~ "1",
+    TRUE ~ "0"
+  ))
+
+RQ3Data$Insurance <- as.numeric(RQ3Data$Insurance)
+
+#Count the total number of tests / procedures done for pt
+test_vars <- c("mri_ct", "surgery", "xray", "lab_tests", 
+               "ekg", "ultrasound", "mammogram", 
+               "vaccination", "rx_given", "related_condition")
+
+# Create new variable
+RQ3Data <- RQ3Data %>%
+  rowwise() %>%
+  mutate(total_tests = sum(c_across(all_of(test_vars)), na.rm = TRUE)) %>%
+  ungroup()
+
+RQ3Data<- RQ3Data %>%
+  dplyr:: select(Insurance, total_tests,person_id) #added ID or dupersid to merge later
+
+
+```
+
+Merging New Dataset
+
+```{r}
+library(haven)
+library(dplyr)
+
+#dowloaded the SAS File & filtering only the variables needed
+MergeDataDemo <- read_sas("C:/Users/diane/Downloads/h251.sas7bdat") %>%
+  dplyr::select(DUPERSID, SEX,#1 male, 2 female
+                POVCAT23) #1 is low income to 5 high
+
+RQ3Data <- RQ3Data %>%
+  mutate(person_id = as.numeric(person_id))
+
+MergeDataDemo <- MergeDataDemo %>%
+  mutate(DUPERSID = as.numeric(DUPERSID))
+
+MergedDataRQ3 <- RQ3Data %>%
+  left_join(MergeDataDemo, by = c("person_id" = "DUPERSID"))
+
+MergedDataRQ3 <- MergedDataRQ3 %>%
+   dplyr::select(-person_id)#no need after merge
+
+#changing sex to 0,1 (male 0 female 1)
+MergedDataRQ3 <- MergedDataRQ3 %>%
+  mutate(SEX = ifelse(SEX == 1, 0,
+                      ifelse(SEX == 2, 1, NA)))
+
+#Missing Data
+sum(is.na(MergedDataRQ3)) #no missing
+```
+
+Data Visualization
+
+```{r}
+library (ggplot2)
+library (plotly)
+#making the visualization show yes / no
+RQ3Viz <- MergedDataRQ3 %>%
+  mutate(Insurance = factor(Insurance,
+                            levels = c(0, 1),
+                            labels = c("No", "Yes")))
+
+
+ggplotly(ggplot(RQ3Viz, aes(x = factor(POVCAT23), fill = Insurance)) +
+  geom_bar(position = "dodge") +
+  labs(x = "Poverty Category", y = "Count",
+       title = "Poverty Category by Insurance Status"))
+#high income has a higher no insurance rate than the very low
+
+#table of insurance & poverty category
+table(RQ3Viz$Insurance, RQ3Viz$POVCAT23)
+prop.table(table(RQ3Viz$Insurance, RQ3Viz$POVCAT23), margin = 1) * 100 #proporations
+
+
+
+table (RQ3Viz$Insurance)# Imbalanced data 644 No insurance 3597 Insurance
+table (RQ3Viz$total_tests)
+str (RQ3Viz) #all numerical
+
+prop.table(table(RQ3Viz$Insurance, RQ3Viz$total_tests), margin = 1) * 100
+
+
+#left skewed normal distribution - try to add a line showing the distribution - create different one then overlap?
+ggplotly(ggplot(RQ3Viz, aes(x = factor(total_tests), fill = factor(Insurance))) +
+  geom_bar(position = "dodge") +
+  labs(
+    title = "Number of ER Tests by Insurance Status",
+    x = "Total Tests/Procedures",
+    y = "Number of Patients",
+    fill = "Insurance"
+  ) +
+  theme_minimal())
+  
+
+
+```
+
+Multiple Linear Regression
+
+```{r}
+library (caret)
+
+set.seed(1)
+train_index3 <- createDataPartition(MergedDataRQ3$total_tests, 
+                                    p = 0.7, 
+                                    list = FALSE)
+
+# Training and testing datasets
+train_data3 <- MergedDataRQ3[train_index3, ]
+test_data3 <- MergedDataRQ3[-train_index3, ]
+
+#traing on train data
+fit3 <- lm(total_tests ~ factor(Insurance) + factor(SEX) + factor(POVCAT23),
+           data = train_data3)
+#Test on test
+pred_lm3 = predict(fit3, newdata = test_data3)
+
+summary(fit3)
+
+#Performance on Test Data
+RMSE(pred_lm3, test_data3$total_tests) #1.37 RMSE
+mean(abs(test_data3$total_tests - pred_lm3)) #1.115986 MAE
+cor(test_data3$total_tests, pred_lm3)^2 #0.007887108 RSQLM
+
+var(test_data3$total_tests) #1.9 most people in the data has 1.9 tests done - mean with fewer high/lower; low variance
+
+#hm = lm(Insurance ~ SEX, data = MergedDataRQ3)
+#summary (hm) #Being female (SEX = 1) increases probability of being insured by ~6.6%, holding everything else constant.
+
+```
+
+Poisson regression
+
+```{r}
+
+set.seed(1)
+
+#Poisson Model on Train Data
+model_pois <- glm(total_tests ~ factor(Insurance) + factor(SEX) + factor(POVCAT23),
+                  family = poisson(link = "log"), data = train_data3)
+#making prediction on test data
+Poss_pred_lm3 = predict(model_pois, newdata = test_data3,type = "response")
+
+summary(model_pois)
+
+RMSE(test_data3$total_tests, Poss_pred_lm3) #1.373308 RMSE
+mean(abs(test_data3$total_tests - Poss_pred_lm3)) #1.116015 MAE
+cor(test_data3$total_tests, Poss_pred_lm3)^2 #0.007838005 RSQLM
+
+
+```
+
+Random Forest Regression
+
+```{r}
+library(randomForest)
+
+train_data3 <- MergedDataRQ3[train_index3, ]
+test_data3 <- MergedDataRQ3[-train_index3, ]
+
+rf.RQ3=randomForest(total_tests~.,data=train_data3, ntree = 500, importance = TRUE)
+
+#REGRESSION ANALYSIS FOR CONTINUOUS VARIABLE
+# Make predictions on the test set
+predictionsRQ3 = predict(rf.RQ3, newdata = test_data3)
+
+varImpPlot(rf.RQ3)
+rf.RQ3
+plot(rf.RQ3)
+importance(rf.RQ3)
+summary (rf.RQ3)
+
+# Evaluate the model performance on test
+# Regression metrics
+sqrt(mean((test_data3$total_tests - predictionsRQ3)^2)) #RMSE 1.371164
+mean(abs(test_data3$total_tests - predictionsRQ3)) #MAE: 1.116
+cor(test_data3$total_tests , predictionsRQ3)^2 #RSQLM: 0.01054665
+
+```
+
+Problem of Insurance with Multiple Insurance Types
+
+Do uninsured patients pay more out of pocket?
+
+Access to Services/Procedures: Are uninsured individuals less likely to receive advanced diagnostic procedures (e.g., MRI_M18, XRAYS_M18, LABTEST_M18) or surgeries (SURGPROC) during ER visits compared to insured individuals in 2023? Rationale: Insurance may enable more comprehensive care; stratify by visit category (VSTCTGRY) or condition-relatedness (VSTRELCN).

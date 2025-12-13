@@ -1,0 +1,267 @@
+---
+title: "Research Question 2"
+---
+
+## Which types of ER visits are the costliest for total ER expenditures?
+
+## Objective
+
+The research question is looking to explore the cost behind these ER expenditures. Moreso, it looks to see if large costs are associated with certain diagnostic tests, procedures, or medications provided during the emergency room visit.
+
+Total cost is defined as the total, whole ER expenditures so costs to doctors, facilities, and even patients. This can help healthcare professionals allocate resources towards areas where there are high costs and make efforts in lowering costs without compromising quality of care.
+
+- **Dependent variable:**  
+  - Total Cost 
+  
+- **Independent variables:**  
+  - Diagnostic tests and procedures: 
+    MRI/CT, surgery, X-ray, lab tests, EKG, ultrasound, mammogram, vaccination, prescriptions, related condition
+
+## Data Visualization
+
+```{r}
+#| include: false
+
+library(tidymodels)
+library(glmnet)
+library(xgboost)
+library(vip)
+library(haven)
+library(ranger)
+library(randomForest)
+library(tree)
+library(ISLR)
+library(dplyr)
+library (plotly)
+library(ggplot2)
+library(dplyr)
+library(caret)
+
+OGData= read.csv("C:/Users/diane/downloads/h248e.csv")
+
+OGData_clean <- OGData %>% #only took variables greater than 0
+  filter(
+    # ── RQ1 & RQ2: Tests, diagnostics, and services received ──
+    MRI_M18     >= 0,    # MRI/CT scan
+    SURGPROC    >= 0,    # Surgery performed
+    XRAYS_M18   >= 0,    # X-rays
+    LABTEST_M18 >= 0,    # Lab tests
+    EKG_M18     >= 0,    # EKG/ECG
+    SONOGRAM_M18 >= 0,   # Ultrasound
+    MAMMOG_M18  >= 0,    # Mammogram
+    RCVVAC_M18  >= 0,    # Vaccination
+    MEDPRESC    >= 0,    # Medicine prescribed
+    VSTRELCN    >= 0,    # Related to specific condition?
+    
+    # ── RQ2: Total expenditure and weight ──
+    ERXP23X     >= 0,    # Total ER expenditure (main outcome)
+    PERWT23F    >  0,    # Survey weight (always positive)
+    
+    # ── RQ1: Admission flag ──
+    ERHEVIDX    >= -1,   # -1 = treat-and-release, >0 = admitted (allow -1!)
+    
+    # ── RQ3: Out-of-pocket and payment sources (facility + doctor) ──
+    ERFSF23X    >= 0,    # OOP facility - this is Out of pocket costs to the facility / ER visit room
+    ERDSF23X    >= 0,    # OOP doctor - out of pocket costs to the doctors
+    ERFPV23X    >= 0,    # Private insurance payment (facility)
+    ERDPV23X    >= 0,    # Private insurance payment (doctor)
+    ERFMD23X    >= 0,    # Medicaid payment (facility)
+    ERDMD23X    >= 0,    # Medicaid payment (doctor)
+    ERFMR23X    >= 0,    # Medicare payment (facility)
+    ERDMR23X    >= 0     # Medicare payment (doctor)
+  )
+
+
+OGData_clean <- OGData %>%
+  # ── Keep only the variables we actually use across all 3 RQs ──
+dplyr:: select(
+    # Person-level ID and survey weight
+    person_id   = DUPERSID,
+    weight      = PERWT23F,
+    
+    # ── RQ1: Predict hospital admission ──
+    admitted    = ERHEVIDX,        # will recode below
+    
+    # Tests & diagnostics performed in ER (all yes/no → 0/1)
+    mri_ct      = MRI_M18,
+    surgery     = SURGPROC,
+    xray        = XRAYS_M18,
+    lab_tests   = LABTEST_M18,
+    ekg         = EKG_M18,
+    ultrasound  = SONOGRAM_M18,
+    mammogram   = MAMMOG_M18,
+    vaccination = RCVVAC_M18,
+    rx_given    = MEDPRESC,
+    related_condition = VSTRELCN,
+    
+    # ── RQ2: Total ER cost drivers ──
+    total_cost  = ERXP23X,         # total expenditure (facility + doctor)
+    
+    # ── RQ3: Out-of-pocket by insurance ──
+    oop_facility = ERFSF23X,       # self/family OOP facility
+    oop_doctor   = ERDSF23X,       # self/family OOP doctor
+    
+    private_fac  = ERFPV23X,
+    private_doc  = ERDPV23X,
+    medicaid_fac = ERFMD23X,
+    medicaid_doc = ERDMD23X,
+    medicare_fac = ERFMR23X,
+    medicare_doc = ERDMR23X
+  )
+
+#Cleaning Data to find Insurance v No Insurance
+OGData_clean <- OGData_clean %>%
+  mutate(Insurance = case_when(
+    (private_fac > 0  |  private_doc > 0 | medicaid_fac > 0 | medicaid_doc > 0 | medicare_fac > 0 | medicare_doc > 0) ~ "1",
+    TRUE ~ "0"
+  ))
+
+OGData_clean$Insurance <- as.numeric(OGData_clean$Insurance)
+
+yesno_vars <- c(
+  "mri_ct", "surgery", "xray", "lab_tests", "ekg",
+  "ultrasound", "mammogram", "vaccination", "rx_given",
+  "related_condition")
+
+OGData_clean <- OGData_clean %>%
+  mutate(across(all_of(yesno_vars), ~ ifelse(. == 1, 1, 0))) #keeps all the 1's and replaces the rest with 0
+
+#cleaning admitted inpatient for RQ1
+OGData_clean$admitted <- ifelse(OGData_clean$admitted == "-1", 0, 1) #-1 not admitted - changing to 0;; recoding 1 to be admitted
+
+RQ2Data <- OGData_clean %>%
+  dplyr:: select( admitted,       
+    mri_ct      ,
+    surgery,
+    xray ,
+    lab_tests ,
+    ekg    ,
+    ultrasound ,
+    mammogram ,
+    vaccination ,
+    rx_given ,
+    related_condition,
+    total_cost)
+  
+RQ2DataViz <- RQ2Data %>%
+mutate(cost_group = ifelse(total_cost == 0, "0", ">0"))
+
+```
+
+The boxplot shows the total cost of ER visits has a median of \$578.20, a mean of \$1,227.90, and a maximum of \$195,314.50." 
+
+*Figure 1: Box Plot of Total Cost Distribution of ER Visits*
+```{r}
+#| echo: false
+#| warning: false
+#Boxplot of Total Cost
+ggplotly(ggplot(RQ2Data, aes(x = "", y = total_cost)) +
+geom_boxplot(fill = "steelblue")
+  + # focus on main range
+  ggtitle("Total Cost Distribution of ER Visits") +
+  xlab("Total Cost ($)") +
+  ylab("Count")+
+coord_cartesian(ylim = c(0, 5000))) #this was able to show the box because of so many outliers / noise
+
+```
+This shows a left-skewed distribution of the total cost distribution of ER visits. There were also 367 cases with 0 costs, while there were 3874 cases with more than 0 out of pocket costs. 
+
+*Figure 2: Left Skewed Distribution of Total Cost of ER Visits*
+
+```{r}
+#| echo: false
+#| warning: false
+#showing the distribution of total cost
+ggplot(RQ2Data, aes(x = total_cost)) +
+  geom_histogram(bins = 50, fill = "steelblue", alpha = 0.7) +
+  scale_x_continuous(limits = c(0, 5000)) + # focus on main range
+  ggtitle("Total Cost Distribution of ER Visits") +
+  xlab("Total Cost ($)") +
+  ylab("Count") +
+  theme_minimal()
+```
+
+## Random Forest Model - Regression
+
+The random forest model was chosen because it is able to rank important variables and can handle skewed data and outliers. The random forest model handles outliers by creating hundreds of random subsets of data within these random trees. Some of these outliers can impact a few trees, but overall it will not have a big effect on the predictions.
+
+On the training data, the Random Forest showed a low percentage of variance explained and high mean squared residuals, mainly because the extreme outliers had a large impact. The metrics from the test set are more important because they show how well the model predicts data it hasn’t seen before. The strongest predictors for high ER total costs were patients who were admitted in patient and those who had surgery. The other variables had slight or no effects on ER costs. Random Forest model does not tell you the degree of negative or positive effect on ER costs.
+
+*Figure 3: Variable Importance Plot – Random Forest*
+
+```{r}
+#| echo: false
+library(randomForest)
+library(caret)
+
+set.seed(1)
+train_index1 = createDataPartition(RQ2Data$total_cost, p = 0.7, list = FALSE) 
+train_data1 = RQ2Data[train_index1, ]
+test_data1 = RQ2Data[-train_index1, ]
+
+
+rf.RQ2=randomForest(total_cost~.,data=train_data1, ntree = 500, importance = TRUE)
+varImpPlot(rf.RQ2)
+#rf.RQ2
+#plot(rf.RQ2)
+#importance(rf.RQ2)
+#summary (rf.RQ2)
+
+#REGRESSION ANALYSIS FOR CONTINUOUS VARIABLE
+# Make predictions on the test set
+#predictionsRQ2 = predict(rf.RQ2, newdata = test_data1)
+
+# Evaluate the model performance
+# Regression metrics
+#rmse <- sqrt(mean((test_data1$total_cost - predictionsRQ2)^2)) #RMSE 997.89
+#mae  <- mean(abs(test_data1$total_cost - predictionsRQ2)) #MAE: 243.08
+#rsq  <- cor(test_data1$total_cost, predictionsRQ2)^2 #RSQLM: 0.97
+```
+
+## Multiple Linear Regression
+
+I performed a multiple linear regression once again on predicting total cost on the above variables in the Random Forest Model. Although the multiple linear regression can predict continuous variables, it cannot handle outliers very well. The results showed that patients who were admitted in patient was the strongest predictor in lower ER costs, this shows that there is a \$1,589 decrease for patients who were admitted in patient. This may possibly be because the total cost is now outside of the ER visit, rather an inpatient cost. The second strongest predictor were patients who get an MRI CT have a \$936.09 increase in ER costs, patients with ultrasound increase ER costs by \$648, and patients with lab test increase ER costs by \$336.39. We should also note that the EKG was close to the 0.05 p value at 0.06 barely making the cutoff, with a positive estimate at \$384.07.
+
+
+> **Key Insight:** - **Patients Admitted Inpatient** show a **\$1,589 decrease** in ER costs. 
+
+> **Key Insight:** - **MRI/CT scans** were associated with a **\$936.09 increase** in ER costs.  
+
+> **Key Insight:** - **Ultrasound** and **lab tests** also contributed to higher costs, with increases of **\$648** and **\$336.39**, respectively.
+
+> **Key Insight:** - **EKG** was borderline significant (p = 0.065) with a positive estimate of **\$384.07**, suggesting a modest cost increase associated with EKGs.
+
+These results highlight that **procedures and diagnostics significantly influence ER costs**, while inpatient admission may shift costs away from the ER.
+
+
+*Table 1  Multiple Linear Regression Ranked Coefficients from Strongest to Weakest*
+
+| Predictor         | Estimate | Std. Error | t value | p-value  |
+|-------------------|----------|------------|---------|----------|
+| Admitted\*\*\*    | -1589.18 | 201.76     | -7.877  | 4.68e-15 |
+| mri_ct\*\*\*      | 936.09   | 188.78     | 4.958   | 7.51e-07 |
+| Ultrasound\*      | 648.08   | 251.73     | 2.574   | 0.010088 |
+| lab_tests\*       | 336.39   | 169.31     | 1.987   | 0.047028 |
+| Ekg               | 384.07   | 208.61     | 1.841   | 0.065704 |
+| surgery           | 495.41   | 341.66     | 1.450   | 0.147165 |
+| xray              | 112.29   | 166.11     | 0.676   | 0.499099 |
+| vaccination       | -511.64  | 639.53     | -0.800  | 0.423760 |
+| rx_given          | -64.81   | 175.65     | -0.369  | 0.712158 |
+| related_condition | 90.41    | 227.79     | 0.397   | 0.691458 |
+| mammogram         | -437.42  | 1901.22    | -0.230  | 0.818052 |
+| (Intercept)       | 867.75   | 227.04     | 3.822   | 0.000135 |
+
+## RQ2: Best Model – Random Forest
+
+Referring to Table 4, the multiple linear regression model had an RMSE of \$3,689.77, indicating that predicted ER costs differed from actual costs by roughly this amount on average. The MAE was \$1,147.58, showing that predictions were about \$1,147 away from the true ER cost. The R² value of 0.132 indicates that the model explains only 13.2% of the variation in ER costs, suggesting that linear regression is not well-suited for predicting ER costs in this dataset.
+
+In comparison, the Random Forest model performed much better, with an RMSE of \$997.89, an MAE of \$243.08, and an R² of 0.97. This means that predictions were much closer to actual costs and that the model captured 97% of the variation in ER costs, making it a more reliable method for predicting total ER expenditures, especially given the presence of extreme outliers.
+
+While linear regression provides precise estimates of how each predictor increases or decreases total costs, the Random Forest model does not indicate the direction of the predictors. But the Random Forest is a better model than the linear regression because it is able to handle outliers through their random trees. Extreme outliers in ER costs disproportionately affected the regression line, inflating errors and lowering R².
+
+  *Table 2: Performance Metrics Comparisons: Random Forest &* Multiple *Linear Model*
+
+| Model                 | RMSE    | MAE     | R-Squared |
+|-----------------------|---------|---------|-----------|
+| Random Forest         | 997.89  | 243.08  | 0.97      |
+| Multiple Linear Model | 3689.77 | 1147.58 | 0.132     |
