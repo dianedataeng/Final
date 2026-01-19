@@ -29,13 +29,6 @@ The goal is to understand factors influencing inpatient admissions, ER costs, an
 
 ---
 
-## Author
-
-**Diane Kim**  
-MS Data Engineering Student, George Mason University  
-
----
-
 ## Repository Structure
 
 ```text
