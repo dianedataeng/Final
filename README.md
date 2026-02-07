@@ -22,19 +22,4 @@ The goal is to understand factors influencing inpatient admissions, ER costs, an
 
 ---
 
-## Skills & Tools
 
-- **Languages & Tools:** R, SQL, WEKA, ggplot2, Plotly, Quarto  
-- **Focus:** Data preprocessing, statistical modeling, machine learning, and visualization  
-
----
-
-## Repository Structure
-
-```text
-├── data/       # Cleaned datasets
-├── scripts/    # R scripts
-├── figures/    # Plots and tables
-├── report/     # Final report
-├── website/    # Quarto website
-└── README.md
